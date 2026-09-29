@@ -41,7 +41,7 @@
     "eslint-config-next": "16.2.11",
     "jsdom": "27.3.0",
     "openapi-typescript": "7.10.1",
-    "tailwindcss": "4.1.18",
+    "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   },
