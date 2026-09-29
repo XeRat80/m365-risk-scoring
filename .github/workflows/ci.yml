@@ -137,11 +137,11 @@ jobs:
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f apps/web/Dockerfile --output type=oci,dest=/tmp/web.oci apps/web
       - id: trivy-python
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with: {input: /tmp/python.oci, format: sarif, output: trivy-python.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - id: trivy-web
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with: {input: /tmp/web.oci, format: sarif, output: trivy-web.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - uses: anchore/sbom-action@v0.20.5
         with: {file: /tmp/python.oci, output-file: python.spdx.json, format: spdx-json}
