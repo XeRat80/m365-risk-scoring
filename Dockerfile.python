@@ -1,0 +1,21 @@
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=8
+WORKDIR /app
+
+RUN addgroup --system app && adduser --system --ingroup app app
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt ./
+RUN pip install --require-hashes -r requirements.txt
+COPY services ./services
+COPY packages ./packages
+COPY scripts/__init__.py scripts/build_demo_model.py ./scripts/
+COPY alembic.ini ./
+COPY db ./db
+RUN mkdir -p /app/artifacts/models/current
+RUN chown -R app:app /app
+USER app
+
+CMD ["uvicorn", "services.api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

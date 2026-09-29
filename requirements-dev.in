@@ -1,0 +1,8 @@
+-r requirements-ml.in
+mypy>=1.16,<2
+pip-audit>=2.9,<3
+pip-tools>=7.5,<8
+pytest>=9.0.3,<10
+pytest-asyncio>=1.0,<2
+pytest-cov>=6.2,<7
+ruff>=0.12,<1

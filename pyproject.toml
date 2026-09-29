@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "m365-risk-platform"
+version = "0.1.0"
+description = "Offline-first Microsoft 365 user risk scoring platform"
+requires-python = ">=3.13,<3.14"
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "integration: requires PostgreSQL or running services",
+  "e2e: requires the Docker Compose demo",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+exclude = ["notebooks", "data", "artifacts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S"]
+ignore = ["S101", "S105", "S112", "S311", "B008", "E501"]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+strict = true
+ignore_missing_imports = true
+exclude = ["notebooks", "scripts"]
+
+[tool.coverage.run]
+source = ["services", "packages"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true

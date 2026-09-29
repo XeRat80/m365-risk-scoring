@@ -1,0 +1,17 @@
+.git
+.venv
+apps/web/node_modules
+apps/web/.next
+data
+reports
+releases
+backups
+artifacts
+**/__pycache__
+**/*.pyc
+.env
+output
+source_video.mov
+video_clips
+video_preview
+tmp

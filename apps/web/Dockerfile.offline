@@ -1,0 +1,17 @@
+FROM node:24-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && addgroup --system nodejs \
+    && adduser --system --ingroup nodejs nextjs
+COPY --chown=nextjs:nodejs .next/standalone ./
+COPY --chown=nextjs:nodejs .next/static ./.next/static
+COPY --chown=nextjs:nodejs public ./public
+# The dashboard does not use Next image optimization. Remove the optional
+# host-specific sharp binary from this portable standalone output.
+RUN find . -type f -name '*.node' -delete
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]

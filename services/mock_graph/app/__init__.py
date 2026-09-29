@@ -1,0 +1,1 @@
+"""Mock Graph FastAPI application."""

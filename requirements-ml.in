@@ -1,0 +1,14 @@
+-r requirements.in
+jupyterlab>=4.4,<5
+matplotlib>=3.10,<4
+nbconvert>=7.16,<8
+nbformat>=5.10,<6
+numba>=0.62,<1
+onnx>=1.18,<2
+pandas>=2.3,<3
+papermill>=2.6,<3
+polars>=1.31,<2
+pyarrow>=23.0.1,<24
+seaborn>=0.13,<1
+shap>=0.48,<1
+skl2onnx>=1.19,<2

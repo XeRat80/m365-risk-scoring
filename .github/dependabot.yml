@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule: {interval: monthly}
+    groups:
+      python-patches:
+        update-types: [patch]
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule: {interval: monthly}
+    groups:
+      frontend-patches:
+        update-types: [patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: monthly}

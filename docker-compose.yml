@@ -1,0 +1,136 @@
+name: m365-risk
+
+x-python: &python
+  image: m365-risk-python:${M365_RISK_VERSION:-dev}
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    mock-graph:
+      condition: service_healthy
+  networks: [risk-net]
+  volumes:
+    - ${MODEL_BUNDLE_PATH:-./artifacts/models/v3-precision-20260923-r2}:/app/artifacts/models/current:ro
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: m365risk
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d m365risk"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [risk-net]
+
+  mock-graph:
+    image: m365-risk-mock-graph:${M365_RISK_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: ["uvicorn", "services.mock_graph.app.main:app", "--host", "0.0.0.0", "--port", "8081", "--no-access-log"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://m365risk:m365risk@postgres:5432/m365risk
+    ports:
+      - "127.0.0.1:8081:8081"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health/live')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [risk-net]
+
+  api:
+    <<: *python
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: ["sh", "-c", "alembic upgrade head && python -m services.api.app.seed && uvicorn services.api.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    <<: *python
+    command: ["python", "-m", "services.worker.app.main"]
+
+  web:
+    image: m365-risk-web:${M365_RISK_VERSION:-dev}
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [risk-net]
+
+  simulator:
+    <<: *python
+    command: ["uvicorn", "services.simulator.app.main:app", "--host", "0.0.0.0", "--port", "3002", "--no-access-log"]
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3002/health/live')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observability]
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.template.yml:ro
+    environment:
+      METRICS_KEY: ${METRICS_KEY:-local-metrics-key-change-me}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - sed "s|__METRICS_KEY__|$$METRICS_KEY|g" /etc/prometheus/prometheus.template.yml > /tmp/prometheus.yml && /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    networks: [risk-net]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.130.1
+    profiles: [observability]
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    volumes:
+      - ./infra/observability/otel-collector.yml:/etc/otelcol-contrib/config.yml:ro
+    ports: ["127.0.0.1:4317:4317", "127.0.0.1:4318:4318"]
+    networks: [risk-net]
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    profiles: [observability]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: local-grafana
+    volumes:
+      - ./infra/observability/grafana:/etc/grafana/provisioning:ro
+    ports: ["127.0.0.1:3001:3000"]
+    networks: [risk-net]
+
+volumes:
+  postgres-data:
+
+networks:
+  risk-net:
