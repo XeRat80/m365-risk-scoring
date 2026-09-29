@@ -97,7 +97,7 @@ jobs:
           find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > "$checksum_file"
           mv "$checksum_file" SHA256SUMS
       - run: tar -C release -czf "../m365-risk-${GITHUB_REF_NAME}.tar.gz" .
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: m365-risk-${{ github.ref_name }}.tar.gz
           generate_release_notes: true
