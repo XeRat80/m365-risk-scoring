@@ -48,19 +48,19 @@ jobs:
           done
       - id: trivy-python-amd64
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with: {input: release/images/python-amd64.tar, format: sarif, output: release/python-amd64.trivy.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - id: trivy-python-arm64
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with: {input: release/images/python-arm64.tar, format: sarif, output: release/python-arm64.trivy.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - id: trivy-web-amd64
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with: {input: release/images/web-amd64.tar, format: sarif, output: release/web-amd64.trivy.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - id: trivy-web-arm64
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with: {input: release/images/web-arm64.tar, format: sarif, output: release/web-arm64.trivy.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - uses: anchore/sbom-action@v0.20.5
         with: {file: release/images/python-amd64.tar, output-file: release/python-amd64.spdx.json, format: spdx-json}
