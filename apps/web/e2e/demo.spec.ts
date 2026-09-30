@@ -1,86 +1,91 @@
 import {expect, test} from "@playwright/test";
 
-test("signs into the offline tenant and shows the dashboard", async ({page}) => {
+const API = "http://localhost:8000";
+
+type Session = {token: string};
+type Run = {
+  id: string;
+  scenario: string;
+  target_user_id: string;
+  status: "queued" | "syncing" | "evaluating" | "detected" | "missed" | "reset";
+  detected: boolean;
+  measurements: {mail_observations?: number};
+};
+
+test("keeps scenarios in the validation lab and detects their evidence in the SOC", async ({page}) => {
   test.setTimeout(150_000);
+
   await page.goto("/");
   await expect(page.getByRole("heading", {name: /See user risk/})).toBeVisible();
   await page.getByRole("button", {name: "Open risk command"}).click();
   await expect(page.getByRole("heading", {name: "User risk overview"})).toBeVisible({timeout: 20_000});
-  await expect(page.getByText("Scenario control")).toBeVisible();
   await expect(page.getByText("Connector health")).toBeVisible();
   await expect(page.getByText("Incoming mail telemetry")).toBeVisible();
-  const liveStatus = page.locator(".sim-status strong");
-  const session = await page.evaluate(() => JSON.parse(localStorage.getItem("m365-risk-session") ?? "{}") as {token: string});
-  const latestSync = async () => {
-    const response = await page.request.get("http://localhost:8000/api/v1/sync/jobs?limit=1", {
-      headers: {Authorization: `Bearer ${session.token}`},
-    });
-    expect(response.ok()).toBeTruthy();
-    return ((await response.json()) as {items: Array<{id: string; status: string}>}).items[0];
-  };
-  const latestMail = async () => {
-    const response = await page.request.get("http://localhost:8000/api/v1/mail/events?limit=24", {
-      headers: {Authorization: `Bearer ${session.token}`},
-    });
-    expect(response.ok()).toBeTruthy();
-    const payload = await response.json() as {items: Array<Record<string, unknown>>};
-    for (const event of payload.items) {
-      expect(event).not.toHaveProperty("subject");
-      expect(event).not.toHaveProperty("body");
-      expect(event).not.toHaveProperty("preview");
-    }
-    return payload.items;
-  };
-  const priorSyncId = (await latestSync())?.id;
-  await page.getByRole("button", {name: "Reset"}).click();
-  await expect(liveStatus).toContainText("normal", {timeout: 10_000});
-  await expect.poll(async () => {
-    const latest = await latestSync();
-    return latest?.id !== priorSyncId ? latest?.status : "unchanged";
-  }, {timeout: 45_000, intervals: [250]}).toBe("completed");
-  await page.getByPlaceholder("Search users").fill("user-001");
-  await expect(page.getByRole("button", {name: "User 001"})).toBeVisible({timeout: 20_000});
-  await page.getByRole("button", {name: "User 001"}).click();
-  const scoreHeading = page.getByRole("heading", {name: /user-001 · score/});
-  await expect(scoreHeading).toBeVisible();
-  const readScore = async () => Number((await scoreHeading.textContent())?.match(/score (\d+)/)?.[1] ?? 0);
-  await expect.poll(readScore, {timeout: 20_000, intervals: [500]}).toBeLessThan(50);
-  await expect(page.getByText("Data is stale or synchronization is still completing.")).toBeHidden({timeout: 20_000});
-  const initialMailId = String((await latestMail())[0]?.id ?? "");
-  await expect.poll(async () => String((await latestMail())[0]?.id ?? ""), {timeout: 20_000, intervals: [1000]}).not.toBe(initialMailId);
-  const initialRisk = await readScore();
-  await expect(page.getByText("Recommended actions")).toBeVisible();
-  await page.getByLabel("Analyst note (optional)").fill("Validated in the offline simulation.");
-  await page.getByRole("button", {name: "safe", exact: true}).click();
-  await expect(page.getByText("Recorded: safe")).toBeVisible();
+  await expect(page.getByText("Scenario control")).toHaveCount(0);
 
-  const initialStatus = await liveStatus.textContent();
-  await expect.poll(async () => liveStatus.textContent(), {timeout: 8_000}).not.toBe(initialStatus);
-  const preScenarioSyncId = (await latestSync())?.id;
-  await page.getByRole("button", {name: "credential phishing"}).click();
-  await expect(liveStatus).toContainText("credential-phishing", {timeout: 10_000});
-  await expect(page.getByText("Credential phishing active")).toBeVisible();
+  const {token} = await page.evaluate(() => JSON.parse(localStorage.getItem("m365-risk-session") ?? "{}") as Session);
+  expect(token).toBeTruthy();
+  const headers = {Authorization: `Bearer ${token}`};
+  const usersResponse = await page.request.get(`${API}/api/v1/users?limit=100`, {headers});
+  expect(usersResponse.ok()).toBeTruthy();
+  const users = await usersResponse.json() as {items: Array<{id: string}>};
+  expect(users.items).toHaveLength(100);
+  expect(users.items.some((user) => user.id === "user-001")).toBe(true);
+
+  const lab = await page.context().newPage();
+  await lab.goto("http://localhost:3002");
+  await expect(lab.getByRole("heading", {name: "Scenario launcher"})).toBeVisible();
+  await expect(lab.locator('#target option[value="user-001"]')).toBeAttached({timeout: 20_000});
+  await lab.locator("#target").selectOption("user-001");
+  await lab.getByRole("button", {name: "Run targeted validation"}).click();
+  await expect(lab.locator("#runId")).toContainText("Run ", {timeout: 20_000});
+  await expect(lab.getByRole("heading", {name: "Live data flow"})).toBeVisible();
+
+  let runId = "";
   await expect.poll(async () => {
-    const latest = await latestSync();
-    return latest?.id !== preScenarioSyncId ? latest?.status : "unchanged";
-  }, {timeout: 10_000, intervals: [250]}).toBe("completed");
-  await expect.poll(readScore, {timeout: 10_000, intervals: [500]}).toBeGreaterThan(initialRisk);
-  await expect.poll(async () => (await latestMail()).some((event) => Number(event.risk_probability) >= .7 && Object.values(event.authentication_results as Record<string, string>).includes("fail")), {timeout: 10_000, intervals: [500]}).toBe(true);
-  await expect(page.getByTestId("mail-event-feed").getByText(/high/).first()).toBeVisible();
-  const compromisedRisk = await readScore();
-  await expect(page.getByText("High-risk email headers")).toBeVisible();
-  await page.getByRole("button", {name: "recovery"}).click();
-  await expect(liveStatus).toContainText("normal", {timeout: 10_000});
-  await page.getByRole("button", {name: "Reset"}).click();
-  await expect(liveStatus).toContainText("normal", {timeout: 10_000});
+    const response = await page.request.get(`${API}/api/v1/simulation-runs?limit=1`, {headers});
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json() as {items: Run[]};
+    const run = payload.items[0];
+    if (run?.scenario === "credential-phishing" && run.target_user_id === "user-001") runId = run.id;
+    return runId;
+  }, {timeout: 20_000}).not.toBe("");
+
+  const currentRun = async () => {
+    const response = await page.request.get(`${API}/api/v1/simulation-runs/${runId}`, {headers});
+    expect(response.ok()).toBeTruthy();
+    return await response.json() as Run;
+  };
+  await expect.poll(async () => (await currentRun()).status, {timeout: 90_000, intervals: [1000]}).toBe("detected");
+  const completed = await currentRun();
+  expect(completed.detected).toBe(true);
+  expect(completed.measurements.mail_observations).toBeGreaterThan(0);
+  await expect(lab.locator("#status")).toHaveText("detected", {timeout: 15_000});
+
+  const mailResponse = await page.request.get(`${API}/api/v1/mail/events?limit=50`, {headers});
+  expect(mailResponse.ok()).toBeTruthy();
+  const mail = await mailResponse.json() as {items: Array<Record<string, unknown>>};
+  expect(mail.items.some((event) => event.user_id === "user-001" && Number(event.risk_probability) >= 0.7)).toBe(true);
+  for (const event of mail.items) {
+    expect(event).not.toHaveProperty("subject");
+    expect(event).not.toHaveProperty("body");
+    expect(event).not.toHaveProperty("preview");
+  }
+
+  await page.goto("/users/user-001");
+  await expect(page.getByRole("heading", {name: "User 001"})).toBeVisible({timeout: 20_000});
+  await expect(page.getByRole("heading", {name: "Current assessment"})).toBeVisible();
+  await page.goto("/mail");
+  await expect(page.getByRole("heading", {name: "Privacy-safe header telemetry"})).toBeVisible();
 
   await page.getByRole("button", {name: "Sign out"}).click();
   await page.getByLabel("Tenant").click();
   await page.getByRole("option", {name: "Contoso Operations"}).click();
   await page.getByRole("button", {name: "Open risk command"}).click();
-  await expect(page.getByText("Contoso Operations · admin")).toBeVisible();
-  await page.getByPlaceholder("Search users").fill("user-001");
-  await page.getByRole("button", {name: "User 001"}).click();
-  const tenantTwoScore = await readScore();
-  expect(tenantTwoScore).toBeLessThan(compromisedRisk);
+  await expect(page.getByRole("heading", {name: "User risk overview"})).toBeVisible();
+  const secondSession = await page.evaluate(() => JSON.parse(localStorage.getItem("m365-risk-session") ?? "{}") as Session);
+  const crossTenant = await page.request.get(`${API}/api/v1/simulation-runs/${runId}`, {
+    headers: {Authorization: `Bearer ${secondSession.token}`},
+  });
+  expect(crossTenant.status()).toBe(404);
 });
