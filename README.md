@@ -120,7 +120,7 @@ Raw SpamAssassin and Enron archives, generated Parquet, reports, and model artif
 
 A fresh GitHub clone generates `rules-demo-1`, which has no measured precision and is for local demonstration only. This development workspace also has an optional `0.3.1-precision` artifact in `artifacts/models/v3-precision-20260923-r2`. On the untouched chronological email holdout it measured 87.70% precision, 84.70% recall, 0.8735 PR-AUC, and 0.0730 Brier loss. It remains deliberately unapproved because the training corpus is legacy SpamAssassin rather than labelled Microsoft 365 compromise data. Model artifacts are ignored by Git, so a company installer must obtain a separately published, approved bundle before real scans are enabled.
 
-Dataset details and checksums are in [`data/README.md`](data/README.md) and [`data/DATASET_MANIFEST.json`](data/DATASET_MANIFEST.json).
+Dataset sources, limitations, and privacy boundaries are described in the [data card](docs/DATA_CARD.md). Local dataset files and manifests are not included in this public source release.
 
 ## Security and tenancy
 
@@ -144,7 +144,7 @@ make benchmark     # API p95, event throughput, update delay
 
 CI additionally checks migration drift, OpenAPI-generated TypeScript drift, notebook smoke execution, Docker Compose, dependency audits, Gitleaks, Trivy, SBOMs, and AMD64/ARM64 image builds.
 
-The latest exact-release acceptance run passed 51 unit tests at 71.21% coverage, 6 PostgreSQL integration tests, Playwright E2E, all 5 notebooks, `pip-audit`, `pnpm audit`, and fixable high/critical Trivy gates. It measured 6.75 ms read p95, 4,718.3 metadata events/minute, and 465.86 MiB core Compose memory.
+An earlier local acceptance run passed 51 unit tests at 71.21% coverage, 6 PostgreSQL integration tests, Playwright E2E, all 5 notebooks, dependency audits, and fixable high/critical Trivy gates. It measured 6.75 ms read p95, 4,718.3 metadata events/minute, and 465.86 MiB core Compose memory. Those figures are historical local evidence, not a claim that the current public commit has passed every CI gate or has been validated on a real tenant.
 
 The end-of-study evidence report is generated at `output/pdf/m365-risk-offline-demo-evidence-report.pdf`. It includes 12 vector architecture/UML diagrams, 14 live behavior captures, model graphs, acceptance evidence, and release posture. Editable standalone SVG versions of every diagram are exported under `output/diagrams/`.
 
