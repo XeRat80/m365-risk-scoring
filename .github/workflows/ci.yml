@@ -140,14 +140,15 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.python --output type=oci,dest=/tmp/python.oci .
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f apps/web/Dockerfile --output type=oci,dest=/tmp/web.oci apps/web
+      - run: mkdir -p /tmp/python-oci /tmp/web-oci && tar -xf /tmp/python.oci -C /tmp/python-oci && tar -xf /tmp/web.oci -C /tmp/web-oci
       - id: trivy-python
         continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with: {input: /tmp/python.oci, format: sarif, output: trivy-python.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
+        with: {input: /tmp/python-oci, format: sarif, output: trivy-python.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - id: trivy-web
         continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with: {input: /tmp/web.oci, format: sarif, output: trivy-web.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
+        with: {input: /tmp/web-oci, format: sarif, output: trivy-web.sarif, severity: "HIGH,CRITICAL", ignore-unfixed: true, exit-code: "1"}
       - uses: anchore/sbom-action@v0.20.5
         with: {file: /tmp/python.oci, output-file: python.spdx.json, format: spdx-json}
       - uses: anchore/sbom-action@v0.20.5
