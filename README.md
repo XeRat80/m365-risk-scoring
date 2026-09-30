@@ -14,7 +14,7 @@ cd m365-risk-scoring
 ./scripts/doctor.sh --after-start
 ```
 
-This installer starts a simulated Microsoft environment. A company tenant needs a separately configured deployment, Graph admin consent, API authentication and an approved model; see [real Graph onboarding](docs/RUNBOOK.md#real-graph-onboarding). A real-tenant scan has not yet been validated.
+This installer starts a simulated Microsoft environment. For direct collection from a real tenant on a company machine, use [real tenant scan](docs/REAL_TENANT_SCAN.md). Real-tenant access and scoring are not yet validated.
 
 ## 1. Scan and collect
 

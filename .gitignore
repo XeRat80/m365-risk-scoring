@@ -7,6 +7,7 @@ artifacts/
 reports/generated/
 output/scans/
 output/training/
+private/
 releases/
 .venv/
 .env
