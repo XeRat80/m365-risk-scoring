@@ -82,7 +82,7 @@ test("keeps scenarios in the validation lab and detects their evidence in the SO
   await page.getByLabel("Tenant").click();
   await page.getByRole("option", {name: "Contoso Operations"}).click();
   await page.getByRole("button", {name: "Open risk command"}).click();
-  await expect(page.getByRole("heading", {name: "User risk overview"})).toBeVisible({timeout: 20_000});
+  await expect(page.getByRole("heading", {name: "Privacy-safe header telemetry"})).toBeVisible({timeout: 20_000});
   const secondSession = await page.evaluate(() => JSON.parse(localStorage.getItem("m365-risk-session") ?? "{}") as Session);
   const crossTenant = await page.request.get(`${API}/api/v1/simulation-runs/${runId}`, {
     headers: {Authorization: `Bearer ${secondSession.token}`},
