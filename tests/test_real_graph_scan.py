@@ -52,6 +52,8 @@ def test_normalized_provider_alert_is_counted_for_affected_user() -> None:
 async def test_direct_collection_reports_missing_sources_without_safe_zero(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
+    requested_urls: list[str] = []
+
     class FakeConnector:
         base_url = "https://graph.microsoft.com"
 
@@ -59,14 +61,24 @@ async def test_direct_collection_reports_missing_sources_without_safe_zero(
             pass
 
         async def _collection(self, url: str, _tenant: uuid.UUID) -> list[dict[str, object]]:
-            if "/users?" in url:
-                return [{"id": USER}]
+            requested_urls.append(url)
             if "roleAssignments" in url:
                 raise httpx.HTTPStatusError(
                     "forbidden", request=httpx.Request("GET", url),
                     response=httpx.Response(403),
                 )
+            if "riskyUsers" in url:
+                raise httpx.HTTPStatusError(
+                    "forbidden", request=httpx.Request("GET", url),
+                    response=httpx.Response(403),
+                )
             return []
+
+        async def _get(self, url: str, _tenant: uuid.UUID) -> dict[str, object]:
+            requested_urls.append(url)
+            if "/users/" in url:
+                return {"id": USER}
+            return {"id": USER, "isMfaRegistered": True, "isMfaCapable": True}
 
         async def registration_details(self, _tenant: uuid.UUID) -> list[dict[str, object]]:
             return [{"id": USER, "isMfaRegistered": True, "isMfaCapable": True}]
@@ -97,6 +109,7 @@ async def test_direct_collection_reports_missing_sources_without_safe_zero(
     result = await real_graph_scan.collect(args, b"a" * 32, "not-saved")
     assert result["source_coverage"]["risky_users"]["status"] == "unavailable"
     assert result["source_coverage"]["directory_roles"]["status"] == "unavailable"
+    assert result["source_coverage"]["security_alerts"]["status"] == "not_collected_pilot_scope"
     assert result["model_score_generated"] is False
     row = json.loads((output / "user_features.jsonl").read_text())
     assert row["features"]["entra_risk_level"] is None
@@ -104,3 +117,5 @@ async def test_direct_collection_reports_missing_sources_without_safe_zero(
     assert row["features"]["mfa_registered"] is True
     assert USER not in (output / "user_features.jsonl").read_text()
     assert not (output / "mail_features.jsonl").read_text()
+    assert not any("/security/alerts_v2" in url or "/users?" in url for url in requested_urls)
+    assert any("userId+eq" in url for url in requested_urls)

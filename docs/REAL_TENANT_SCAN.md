@@ -33,6 +33,8 @@ cd m365-risk-scoring
 
 The `check` command prompts for the app secret without echoing it. It tests the directory and optional sources, including one mailbox, and prints source coverage. `HTTP 403` generally means missing consent, licence or access scope; it is not a zero-risk result. Do not put the secret on the command line, in `.env`, in GitHub, or in a shared chat.
 
+Pilot mode requests only the selected user's directory record, MFA state, risk record, sign-ins, role assignments and inbox metadata. It intentionally does **not** request tenant-wide `alerts_v2`, because that endpoint cannot filter on the affected user. The manifest marks alerts `not_collected_pilot_scope`; use an explicitly approved all-user scan to collect them.
+
 ## 3. Collect and inspect
 
 ```bash

@@ -20,6 +20,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -63,6 +64,10 @@ async def optional_source(name: str, call: Any, coverage: dict[str, dict[str, An
         return None
     coverage[name] = {"status": "available", "records": len(rows)}
     return rows
+
+
+async def one_record(call: Any) -> list[dict[str, Any]]:
+    return [await call()]
 
 
 def mail_features(message: dict[str, Any], user_id: str, key: bytes) -> dict[str, Any] | None:
@@ -178,18 +183,28 @@ async def collect(args: argparse.Namespace, key: bytes, secret: str) -> dict[str
         try:
             # Request only IDs and account state. The ordinary connector joins
             # roles and reads names/UPNs, neither needed in this local export.
-            users = await connector._collection(
-                "https://graph.microsoft.com/v1.0/users?$select=id,accountEnabled",
-                tenant_id,
-            )
+            if args.user_id:
+                users = [await connector._get(
+                    f"https://graph.microsoft.com/v1.0/users/{args.user_id}"
+                    "?$select=id,accountEnabled", tenant_id,
+                )]
+            else:
+                users = await connector._collection(
+                    "https://graph.microsoft.com/v1.0/users?$select=id,accountEnabled",
+                    tenant_id,
+                )
         except (httpx.HTTPError, RuntimeError) as exc:
             raise ScanError(f"Directory collection failed: {source_error(exc)}") from exc
         coverage["users"] = {"status": "available", "records": len(users)}
+        role_query = (
+            urlencode({"$select": "principalId", "$filter": f"principalId eq '{args.user_id}'"})
+            if args.user_id else "$select=principalId"
+        )
         role_rows = await optional_source(
             "directory_roles",
             lambda: connector._collection(
                 "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments"
-                "?$select=principalId", tenant_id,
+                f"?{role_query}", tenant_id,
             ),
             coverage,
         )
@@ -198,19 +213,62 @@ async def collect(args: argparse.Namespace, key: bytes, secret: str) -> dict[str
             raise ScanError("Requested user ID was not found in this tenant")
         if args.command == "check":
             selected = selected[:1]
-        registrations = await optional_source(
-            "mfa", lambda: connector.registration_details(tenant_id), coverage
-        )
-        risky_users = await optional_source(
-            "risky_users", lambda: connector.risky_users(tenant_id), coverage
-        )
+        if args.user_id:
+            registrations = await optional_source(
+                "mfa",
+                lambda: one_record(lambda: connector._get(
+                    "https://graph.microsoft.com/v1.0/reports/authenticationMethods/"
+                    f"userRegistrationDetails/{args.user_id}", tenant_id,
+                )), coverage,
+            )
+            risk_query = urlencode({
+                "$select": "id,riskLevel,riskState",
+                "$filter": f"id eq '{args.user_id}'",
+            })
+            risky_users = await optional_source(
+                "risky_users",
+                lambda: connector._collection(
+                    f"https://graph.microsoft.com/v1.0/identityProtection/riskyUsers?{risk_query}",
+                    tenant_id,
+                ), coverage,
+            )
+        else:
+            registrations = await optional_source(
+                "mfa", lambda: connector.registration_details(tenant_id), coverage
+            )
+            risky_users = await optional_source(
+                "risky_users", lambda: connector.risky_users(tenant_id), coverage
+            )
         since = datetime.now(UTC) - timedelta(days=30)
-        sign_ins = await optional_source(
-            "sign_ins", lambda: connector.sign_ins(tenant_id, since), coverage
-        )
-        alerts = await optional_source(
-            "security_alerts", lambda: connector.security_alerts(tenant_id, since), coverage
-        )
+        if args.user_id:
+            timestamp = since.isoformat().replace("+00:00", "Z")
+            sign_in_query = urlencode({
+                "$filter": f"createdDateTime ge {timestamp} and userId eq '{args.user_id}'",
+                "$select": "id,userId,createdDateTime,status,isInteractive,location,ipAddress,"
+                           "deviceDetail,appId,riskLevelDuringSignIn",
+                "$top": "999",
+            })
+            sign_ins = await optional_source(
+                "sign_ins",
+                lambda: connector._collection(
+                    f"https://graph.microsoft.com/v1.0/auditLogs/signIns?{sign_in_query}",
+                    tenant_id,
+                ), coverage,
+            )
+            # alerts_v2 has no server-side filter on evidence.userAccount.
+            # Fetching every tenant alert would violate a one-user pilot scope.
+            alerts = None
+            coverage["security_alerts"] = {
+                "status": "not_collected_pilot_scope",
+                "reason": "Graph alerts_v2 cannot filter by affected user at the API boundary",
+            }
+        else:
+            sign_ins = await optional_source(
+                "sign_ins", lambda: connector.sign_ins(tenant_id, since), coverage
+            )
+            alerts = await optional_source(
+                "security_alerts", lambda: connector.security_alerts(tenant_id, since), coverage
+            )
         registration_by_id = {str(row.get("id")): row for row in registrations or []}
         risk_by_id = {str(row.get("id")): row for row in risky_users or []}
         admin_ids = (
