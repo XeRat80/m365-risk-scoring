@@ -4,7 +4,7 @@ Collect Microsoft 365 security metadata, calculate user risk, and expose results
 
 ## Install
 
-Requirements: Git, Docker with Compose v2, curl, OpenSSL; macOS or Linux. Python 3 is needed for the CLI.
+Requirements: Git, Docker with Compose v2, curl, OpenSSL; macOS or Linux. CLI commands require Python 3.13.
 
 ```bash
 git clone https://github.com/XeRat80/m365-risk-scoring.git
@@ -14,28 +14,29 @@ cd m365-risk-scoring
 ./scripts/doctor.sh --after-start
 ```
 
-The installer currently starts a simulated Microsoft environment for development. For a company tenant, complete [Graph configuration](docs/RUNBOOK.md#real-graph-onboarding), admin consent, API authentication and model configuration first. Real-tenant operation has not yet been validated.
+This installer starts a simulated Microsoft environment. A company tenant needs a separately configured deployment, Graph admin consent, API authentication and an approved model; see [real Graph onboarding](docs/RUNBOOK.md#real-graph-onboarding). A real-tenant scan has not yet been validated.
 
 ## 1. Scan and collect
 
 Set `M365_RISK_TOKEN` to your API administrator token, then run against your configured company deployment:
 
 ```bash
-python3 scripts/scan_cli.py scan --api https://YOUR-COMPANY-API --out output/scans/run-001 --show-results
+python3.13 scripts/scan_cli.py scan --api https://YOUR-COMPANY-API --out output/scans/run-001 --show-results
 ```
 
 The API queues the scan; workers collect metadata and build features. To export existing features:
 
 ```bash
-python3 scripts/scan_cli.py collect --api https://YOUR-COMPANY-API --out output/scans/run-002
+python3.13 scripts/scan_cli.py collect --api https://YOUR-COMPANY-API --out output/scans/run-002
 ```
 
-For the installed test environment, use `--demo` and omit `--api`. This selects simulated data.
+For the installed local environment, use `--demo` and omit `--api`. This selects simulated data.
 
 ## 2. Test
 
 ```bash
-make bootstrap
+# On a fresh developer checkout only:
+./scripts/bootstrap.sh
 make test
 make integration
 ```
@@ -45,7 +46,7 @@ Model evaluation requires scanned features and independently reviewed labels: [t
 ## 3. Show results
 
 ```bash
-python3 scripts/scan_cli.py results --api https://YOUR-COMPANY-API --top 10
+python3.13 scripts/scan_cli.py results --api https://YOUR-COMPANY-API --top 10
 ```
 
 API documentation: `http://localhost:8000/docs`. Optional dashboard: `http://localhost:3000`.
@@ -61,9 +62,9 @@ Set `SYNC_INTERVAL_SECONDS` in `.env`. Workers repeat scans, resume mail checkpo
 
 - `POST /api/v1/sync`: request a scan (administrator).
 - `GET /api/v1/sync/jobs`: check progress.
-- `GET /api/v1/alerts`: read collected user-linked security alerts.
+- `GET /api/v1/alerts`: read Microsoft security alerts, including alerts without a linked user.
 - `POST /api/v1/alerts/{id}/close`: close locally with `{"reason":"resolved"}`, `false_positive`, or `accepted_risk`.
 
-Closure records the analyst, time and reason, and survives synchronization. It preserves evidence and does not change Microsoft Defender or erase calculated risk. New alert IDs remain open.
+In the installed local environment, analysts can also close an alert in the dashboard at `/alerts`. A company SOC can use the authenticated API. Closure records the analyst, time and reason, and survives synchronization. It does not change Microsoft Defender or erase calculated risk. For an alert linked to multiple users, each user observation is closed separately.
 
 See [operations and limitations](docs/RUNBOOK.md) for permissions and deployment details. Keep credentials and company exports out of GitHub.

@@ -100,6 +100,7 @@ class HttpGraphConnector(GraphConnector):
 
     async def _collection(self, url: str, tenant_id: uuid.UUID) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
+        next_link: object | None = None
         for _ in range(1000):
             payload = await self._get(url, tenant_id)
             items.extend(payload.get("value", []))
@@ -107,6 +108,8 @@ class HttpGraphConnector(GraphConnector):
             if not next_link:
                 break
             url = str(next_link)
+        if next_link:
+            raise RuntimeError("Graph collection paging exceeded the safety limit")
         return items
 
     async def users(self, tenant_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -227,8 +230,7 @@ class RealGraphConnector(HttpGraphConnector):
         rows = await self._collection(
             f"{self.base_url}/v1.0/security/alerts_v2"
             f"?$filter=lastUpdateDateTime%20ge%20{timestamp}"
-            "&$select=id,createdDateTime,lastUpdateDateTime,severity,status,"
-            "serviceSource,category,evidence&$top=100",
+            "&$top=100",
             tenant_id,
         )
         # Translate v2 evidence into the worker's metadata contract. Never retain

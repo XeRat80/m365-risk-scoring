@@ -137,12 +137,10 @@ def graph_message_features(
     authentication: dict[str, str] = {}
     supplied_auth = message.get("authenticationResults")
     if isinstance(supplied_auth, Mapping):
+        # A structured result is supplied by our controlled simulator. Microsoft
+        # Graph messages expose Authentication-Results only as a raw header; a
+        # sender can prepend a forged one, so it cannot certify SPF/DKIM/DMARC.
         authentication = {str(key).lower(): str(value).lower() for key, value in supplied_auth.items()}
-    else:
-        auth_value = first_header("authentication-results").lower()
-        for key in ("spf", "dkim", "dmarc"):
-            match = re.search(rf"\b{key}\s*=\s*([a-z]+)", auth_value)
-            authentication[key] = match.group(1) if match else "none"
 
     external_sender = bool(
         message.get("externalSender")
@@ -204,7 +202,7 @@ def graph_message_features(
         "return_path_mismatch": float(
             bool(from_domain and return_domain and from_domain != return_domain)
         ),
-        "has_auth_results": float(bool(authentication)),
+        "has_auth_results": float(bool(first_header("authentication-results") or authentication)),
         "has_list_id": float(bool(first_header("list-id"))),
         "has_precedence": float(bool(first_header("precedence"))),
         "has_html_content_type": float(

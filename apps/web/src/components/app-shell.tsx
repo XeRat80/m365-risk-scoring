@@ -36,6 +36,7 @@ const NAV_GROUPS = [
     items: [
       {href: "/", label: "Overview", icon: Gauge, exact: true},
       {href: "/users", label: "Investigations", icon: Users},
+      {href: "/alerts", label: "Security alerts", icon: Bell},
       {href: "/mail", label: "Mail telemetry", icon: Mail},
       {href: "/graph", label: "Field data graph", icon: Network},
     ],

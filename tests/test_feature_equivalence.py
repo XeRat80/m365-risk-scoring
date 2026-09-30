@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.ml.m365risk_ml.features import graph_message_features, header_features
+from packages.ml.m365risk_ml.v2 import auth_integrity
 
 
 def test_recipient_count_matches_between_training_and_graph_paths() -> None:
@@ -33,3 +34,22 @@ def test_recipient_count_matches_between_training_and_graph_paths() -> None:
     )
     assert offline["recipient_count"] == 3
     assert online["recipient_count"] == offline["recipient_count"]
+
+
+def test_graph_header_authentication_is_unverified_for_risk_scoring() -> None:
+    message = {
+        "id": "message-2",
+        "receivedDateTime": "2026-01-01T10:00:00Z",
+        "internetMessageHeaders": [{
+            "name": "Authentication-Results", "value": "sender.example; spf=fail; dkim=fail; dmarc=fail",
+        }],
+    }
+    safe, features = graph_message_features(message, "user-1", "tenant-key")
+    assert features["has_auth_results"] == 1
+    assert safe["authentication_results"] == {}
+    assert auth_integrity(safe["authentication_results"]).availability == "unavailable"
+
+    message["internetMessageHeaders"] = []
+    safe, features = graph_message_features(message, "user-1", "tenant-key")
+    assert features["has_auth_results"] == 0
+    assert safe["authentication_results"] == {}

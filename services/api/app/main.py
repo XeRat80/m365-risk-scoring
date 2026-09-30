@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlencode
 
 import httpx
@@ -803,18 +803,37 @@ def alert_response(alert: SecurityAlertObservation) -> AlertResponse:
 async def list_alerts(
     cursor: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
+    soc_status: Literal["open", "closed"] | None = None,
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> AlertPage:
     query = select(SecurityAlertObservation).where(
         SecurityAlertObservation.tenant_id == principal.tenant_id
     )
+    closure_present = SecurityAlertObservation.details["soc_closure"].astext.is_not(None)
+    if soc_status == "closed":
+        query = query.where(closure_present)
+    elif soc_status == "open":
+        query = query.where(~closure_present)
     if cursor:
-        query = query.where(SecurityAlertObservation.id > cursor)
-    rows = list(await db.scalars(query.order_by(SecurityAlertObservation.id).limit(limit + 1)))
+        created_raw, id_raw = decode_cursor(cursor, 2)
+        try:
+            created_at = datetime.fromisoformat(created_raw)
+            if created_at.tzinfo is None:
+                raise ValueError("cursor timestamp must include a timezone")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid pagination cursor") from exc
+        query = query.where(or_(
+            SecurityAlertObservation.created_at < created_at,
+            and_(SecurityAlertObservation.created_at == created_at, SecurityAlertObservation.id < id_raw),
+        ))
+    rows = list(await db.scalars(query.order_by(
+        desc(SecurityAlertObservation.created_at), desc(SecurityAlertObservation.id)
+    ).limit(limit + 1)))
     return AlertPage(
         items=[alert_response(row) for row in rows[:limit]],
-        next_cursor=rows[limit - 1].id if len(rows) > limit else None,
+        next_cursor=encode_cursor(rows[limit - 1].created_at, rows[limit - 1].id)
+        if len(rows) > limit else None,
     )
 
 

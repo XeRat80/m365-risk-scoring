@@ -1078,6 +1078,7 @@ export interface operations {
             query?: {
                 cursor?: string | null;
                 limit?: number;
+                soc_status?: ("open" | "closed") | null;
             };
             header?: never;
             path?: never;

@@ -204,6 +204,54 @@ async def test_worker_refreshes_existing_alert_between_cycles(monkeypatch: pytes
     assert next(iter(session.alerts.values())).details["soc_closure"] == {"reason": "accepted_risk"}
 
 
+@pytest.mark.asyncio
+async def test_worker_retains_tenant_alert_and_each_affected_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = FakeSession()
+    tenant_id = uuid.UUID("00000000-0000-4000-8000-000000000001")
+
+    class AlertConnector(FakeConnector):
+        async def users(self, _: uuid.UUID) -> list[dict[str, object]]:
+            return [{"id": value, "displayName": value, "isAdmin": False}
+                    for value in ("user-001", "user-002")]
+
+        async def messages(
+            self, _: uuid.UUID, user_id: str, delta_link: str | None
+        ) -> tuple[list[dict[str, object]], str]:
+            return [], f"http://mock/delta?user={user_id}"
+
+        async def security_alerts(self, _: uuid.UUID, since: datetime) -> list[dict[str, object]]:
+            timestamp = datetime.now(UTC).isoformat()
+            return [
+                {"id": "shared", "createdDateTime": timestamp, "severity": "high",
+                 "status": "new", "userStates": [{"userId": "user-001"}, {"userId": "user-002"}]},
+                {"id": "device-only", "createdDateTime": timestamp, "severity": "medium",
+                 "status": "new", "deviceEvidence": [{"deviceDnsName": "device.example"}]},
+            ]
+
+    async def fake_session(_: uuid.UUID) -> AsyncIterator[FakeSession]:
+        yield session
+
+    monkeypatch.setattr(worker, "connector_for", lambda *_: AlertConnector())
+    monkeypatch.setattr(worker, "tenant_session", fake_session)
+    monkeypatch.setattr(worker, "complete_job", AsyncMock())
+    tenant_key = worker.tenant_pseudonym_key(tenant_id)
+    legacy_id = worker.pseudonym(tenant_key, "security-alert", "device-only")
+    session.add(SecurityAlertObservation(
+        tenant_id=tenant_id, id=legacy_id, user_id="user-001",
+        created_at=datetime.now(UTC), severity="low", status="new",
+        source="defender", details={"soc_closure": {"reason": "resolved"}},
+    ))
+    await worker.process_job(tenant_id, uuid.uuid4(), {})
+    assert len(session.alerts) == 3
+    assert {alert.user_id for alert in session.alerts.values()} == {"user-001", "user-002", None}
+    unlinked = next(alert for alert in session.alerts.values() if alert.user_id is None)
+    assert unlinked.device_hash and "device.example" not in str(unlinked.__dict__)
+    assert unlinked.id == legacy_id
+    await worker.process_job(tenant_id, uuid.uuid4(), {})
+    assert len(session.alerts) == 3
+    assert unlinked.details["soc_closure"] == {"reason": "resolved"}
+
+
 class PartialConnector(FakeConnector):
     async def users(self, _: uuid.UUID) -> list[dict[str, object]]:
         return [

@@ -54,7 +54,7 @@ by `lastUpdateDateTime` to refresh changed alerts. User risk windows still use
 observations created in the last 30 days.
 
 The real connector maps alerts_v2 `evidence.userAccount.azureAdUserId` to employees.
-Device-only alerts without a user mapping are not yet exposed by the user alert API.
+Device-only and unmatched alerts are kept in the tenant SOC queue without a user link.
 Evidence is reduced in memory to allowed identifiers. Microsoft evidence payloads
 can contain sensitive fields, so collection needs company privacy review under a
 strict no-content-access policy. Raw evidence is not persisted. See the
@@ -66,10 +66,22 @@ Analysts and administrators may call `POST /api/v1/alerts/{id}/close` with reaso
 idempotent and preserved during sync. New alert IDs are open. Local closure does
 not clear calculated risk or write to Microsoft. Provider-resolved alerts no longer
 contribute to the active endpoint component. These API actions support SOC integration;
-the existing web dashboard has no new close button in this change.
+the local web dashboard exposes this action at `/alerts`. One provider alert linked to
+several users creates an observation per user; each observation has its own local closure.
+
+Graph mail message headers can contain a sender-supplied `Authentication-Results`
+line. The real connector does not treat this raw line as a trusted SPF, DKIM or
+DMARC verdict for V2 scoring. Authentication remains unavailable until a trusted
+transport verdict source is integrated; the mock source supplies structured test
+verdicts only.
 
 
 **Current status:** this is a development path, not a one-command company installation. The GitHub installer starts only the mock environment. Before enabling real scans, implement and verify tenant onboarding, production identity and API roles, permission and licence preflight, company-owned storage and credentials, source coverage reporting, and an approved model. The company administrator must explicitly grant Graph permissions; installation alone cannot grant consent.
+
+The default five-second polling interval is for the local development environment.
+Each cycle currently fetches the directory, MFA, roles and a rolling sign-in/alert
+window again; it has not been benchmarked for a company tenant. A production setup
+needs source-specific checkpoints and measured freshness under Graph throttling.
 
 The current code expects `CONNECTOR_MODE=real`, a production issuer/audience, Graph client ID/secret, redirect URI, non-default encryption/metrics/mock-boundary secrets, and an approved model. The requested application permissions include `User.Read.All` for `/users`, `Mail.ReadBasic.All`, `AuditLog.Read.All`, `IdentityRiskyUser.Read.All` (Entra P2), `RoleManagement.Read.Directory`, and `SecurityAlert.Read.All`. Permission/licence preflight and genuinely optional consent scopes remain to be implemented. Complete admin consent as a tenant admin and restrict mailbox scope with Exchange Application RBAC. The current client-secret and mock-dependent Compose configuration are development scaffolding; production needs a company-owned credential store and an independently validated deployment. The callback encrypts a tenant-bound credential copy; the worker never uses a request-supplied tenant ID.
 

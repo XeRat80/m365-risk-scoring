@@ -15,6 +15,7 @@ import httpx
 import structlog
 from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.ml.m365risk_ml.features import graph_message_features
 from packages.ml.m365risk_ml.runtime import ModelRuntime
@@ -113,6 +114,56 @@ def alert_user_ids(alert: dict[str, object]) -> set[str]:
     }
 
 
+async def upsert_alert_observation(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    event: dict[str, object],
+    user_id: str | None,
+    tenant_key: str,
+) -> None:
+    provider_id = event.get("id")
+    if not provider_id:
+        return
+    legacy_id = pseudonym(tenant_key, "security-alert", provider_id)
+    event_id = (
+        pseudonym(tenant_key, "security-alert-user", f"{provider_id}:{user_id}")
+        if user_id else legacy_id
+    )
+    # Preserve existing records (and their SOC closure) created before alert
+    # observations were keyed by both provider alert and affected user.
+    if user_id:
+        legacy = await session.get(SecurityAlertObservation, (tenant_id, legacy_id))
+        if legacy and legacy.user_id == user_id:
+            event_id = legacy_id
+    devices = event.get("deviceEvidence") or []
+    first_device = devices[0] if isinstance(devices, list) and devices else {}
+    device_name = first_device.get("deviceDnsName") if isinstance(first_device, dict) else None
+    device_hash = pseudonym(tenant_key, "device", device_name) if device_name else None
+    existing = await session.get(SecurityAlertObservation, (tenant_id, event_id))
+    if existing:
+        if user_id is None:
+            existing.user_id = None
+        existing.severity = str(event.get("severity") or "unknown").lower()
+        existing.status = str(event.get("status") or "unknown")
+        existing.source = str(event.get("serviceSource") or "unknown")
+        existing.category = str(event.get("category") or "") or None
+        existing.device_hash = device_hash
+        return
+    observation = SecurityAlertObservationV1(
+        id=event_id,
+        user_id=user_id,
+        created_at=graph_datetime(event.get("createdDateTime")),
+        severity=str(event.get("severity") or "unknown").lower(),
+        status=str(event.get("status") or "unknown"),
+        source=str(event.get("serviceSource") or "unknown"),
+        category=str(event.get("category") or "") or None,
+        device_hash=device_hash,
+    )
+    session.add(SecurityAlertObservation(
+        tenant_id=tenant_id, **observation.model_dump(), details={},
+    ))
+
+
 @lru_cache(maxsize=1)
 def model_runtime() -> ModelRuntime:
     return ModelRuntime.load(
@@ -205,6 +256,7 @@ async def process_job_with_connector(
 ) -> None:
     runtime = model_runtime()
     users = await connector.users(tenant_id)
+    known_user_ids = {str(item["id"]) for item in users}
     registrations = {item["id"]: item for item in await connector.registration_details(tenant_id)}
     risky_source_available = True
     try:
@@ -304,38 +356,7 @@ async def process_job_with_connector(
                     )
                 )
             for event in user_alerts:
-                event_id = pseudonym(tenant_key, "security-alert", event.get("id", ""))
-                existing_alert = await session.get(SecurityAlertObservation, (tenant_id, event_id))
-                if existing_alert:
-                    existing_alert.severity = str(event.get("severity") or "unknown").lower()
-                    existing_alert.status = str(event.get("status") or "unknown")
-                    continue
-                devices = event.get("deviceEvidence") or []
-                first_device = devices[0] if isinstance(devices, list) and devices else {}
-                device_name = (
-                    first_device.get("deviceDnsName")
-                    if isinstance(first_device, dict)
-                    else None
-                )
-                alert_observation = SecurityAlertObservationV1(
-                    id=event_id,
-                    user_id=user_id,
-                    created_at=graph_datetime(event.get("createdDateTime")),
-                    severity=str(event.get("severity") or "unknown").lower(),
-                    status=str(event.get("status") or "unknown"),
-                    source=str(event.get("serviceSource") or "unknown"),
-                    category=str(event.get("category") or "") or None,
-                    device_hash=(
-                        pseudonym(tenant_key, "device", device_name) if device_name else None
-                    ),
-                )
-                session.add(
-                    SecurityAlertObservation(
-                        tenant_id=tenant_id,
-                        **alert_observation.model_dump(),
-                        details={},
-                    )
-                )
+                await upsert_alert_observation(session, tenant_id, event, user_id, tenant_key)
             delta_link = str(new_checkpoint.get(user_id)) if new_checkpoint.get(user_id) else None
             try:
                 messages, next_delta = await connector.messages(
@@ -735,6 +756,15 @@ async def process_job_with_connector(
                     session.add(current_score)
                     existing_scores.append(current_score)
             user.last_seen_at = now
+    # Keep device-only and deleted-user alerts visible in the tenant SOC queue.
+    unlinked_alerts = [
+        event for event in raw_alerts
+        if not alert_user_ids(event).intersection(known_user_ids)
+    ]
+    if unlinked_alerts:
+        async for session in tenant_session(tenant_id):
+            for event in unlinked_alerts:
+                await upsert_alert_observation(session, tenant_id, event, None, tenant_key)
     if mailbox_failures:
         error = "Partial mailbox failures: " + ", ".join(mailbox_failures)
         await complete_job(tenant_id, job_id, new_checkpoint, error[:2000])

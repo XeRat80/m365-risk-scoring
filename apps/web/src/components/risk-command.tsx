@@ -7,7 +7,7 @@ import {RiskContextProvider} from "@/components/risk-context";
 import {Skeleton} from "@/components/ui/skeleton";
 import {useRiskSession} from "@/lib/session";
 
-export type RiskView = "overview" | "users" | "user" | "mail" | "graph" | "operations" | "models";
+export type RiskView = "overview" | "users" | "user" | "alerts" | "mail" | "graph" | "operations" | "models";
 
 function ViewSkeleton() {
   return (
@@ -31,6 +31,7 @@ function ViewSkeleton() {
 const OverviewView = dynamic(() => import("@/components/views/overview-view").then((module) => module.OverviewView), {loading: () => <ViewSkeleton/>});
 const UsersView = dynamic(() => import("@/components/views/users-view").then((module) => module.UsersView), {loading: () => <ViewSkeleton/>});
 const UserView = dynamic(() => import("@/components/views/user-view").then((module) => module.UserView), {loading: () => <ViewSkeleton/>});
+const AlertsView = dynamic(() => import("@/components/views/alerts-view").then((module) => module.AlertsView), {loading: () => <ViewSkeleton/>});
 const MailView = dynamic(() => import("@/components/views/mail-view").then((module) => module.MailView), {loading: () => <ViewSkeleton/>});
 const GraphView = dynamic(() => import("@/components/views/graph-view").then((module) => module.GraphView), {loading: () => <ViewSkeleton/>});
 const OperationsView = dynamic(() => import("@/components/views/operations-view").then((module) => module.OperationsView), {loading: () => <ViewSkeleton/>});
@@ -46,6 +47,7 @@ export function RiskCommand({view, userId}: {view: RiskView; userId?: string}) {
         {view === "overview" ? <OverviewView/> : null}
         {view === "users" ? <UsersView/> : null}
         {view === "user" ? <UserView userId={userId ?? ""}/> : null}
+        {view === "alerts" ? <AlertsView/> : null}
         {view === "mail" ? <MailView/> : null}
         {view === "graph" ? <GraphView/> : null}
         {view === "operations" ? <OperationsView/> : null}

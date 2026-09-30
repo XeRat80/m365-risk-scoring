@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from datetime import UTC, datetime
 
@@ -11,7 +12,7 @@ TENANT = uuid.UUID("00000000-0000-4000-8000-000000000001")
 
 
 def connector_settings(**values: str) -> Settings:
-    return Settings(token_encryption_key="test-encryption-key-with-at-least-32-characters", **values)  # noqa: S106
+    return Settings(token_encryption_key=secrets.token_urlsafe(32), **values)
 
 
 @pytest.mark.asyncio
@@ -44,7 +45,7 @@ async def test_real_alerts_normalize_v2_evidence_and_discard_content() -> None:
         assert "sensitive" not in str(rows)
         request = requests[-1]
         assert request.url.params["$filter"].startswith("lastUpdateDateTime ge")
-        assert "userStates" not in request.url.params["$select"]
+        assert "$select" not in request.url.params
     finally:
         await connector.aclose()
 
