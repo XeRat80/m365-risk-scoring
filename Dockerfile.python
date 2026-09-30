@@ -5,10 +5,11 @@ WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends libpq5 \
+    && apt-get install --yes --no-install-recommends libpq5 openssl libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt ./
-RUN pip install --require-hashes -r requirements.txt
+RUN pip install --require-hashes -r requirements.txt \
+    && python -m pip uninstall --yes pip
 COPY services ./services
 COPY packages ./packages
 COPY scripts/__init__.py scripts/build_demo_model.py ./scripts/
