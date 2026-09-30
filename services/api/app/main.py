@@ -54,6 +54,9 @@ from .models import (
 )
 from .observability import configure_logging, configure_tracing
 from .schemas import (
+    AlertCloseRequest,
+    AlertPage,
+    AlertResponse,
     ConnectionResponse,
     CursorPage,
     DashboardSummary,
@@ -784,6 +787,60 @@ async def risks(
     return RiskCursorPage(
         items=[to_risk(score) for score in rows[:limit]], next_cursor=next_cursor
     )
+
+
+def alert_response(alert: SecurityAlertObservation) -> AlertResponse:
+    closure = (alert.details or {}).get("soc_closure")
+    return AlertResponse(
+        id=alert.id, user_id=alert.user_id, severity=alert.severity,
+        provider_status=alert.status, soc_status="closed" if closure else "open",
+        created_at=alert.created_at,
+        closure=closure if isinstance(closure, dict) else None,
+    )
+
+
+@app.get("/api/v1/alerts", response_model=AlertPage)
+async def list_alerts(
+    cursor: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AlertPage:
+    query = select(SecurityAlertObservation).where(
+        SecurityAlertObservation.tenant_id == principal.tenant_id
+    )
+    if cursor:
+        query = query.where(SecurityAlertObservation.id > cursor)
+    rows = list(await db.scalars(query.order_by(SecurityAlertObservation.id).limit(limit + 1)))
+    return AlertPage(
+        items=[alert_response(row) for row in rows[:limit]],
+        next_cursor=rows[limit - 1].id if len(rows) > limit else None,
+    )
+
+
+@app.post("/api/v1/alerts/{alert_id}/close", response_model=AlertResponse)
+async def close_alert(
+    alert_id: str,
+    payload: AlertCloseRequest,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AlertResponse:
+    alert = await db.scalar(select(SecurityAlertObservation).where(
+        SecurityAlertObservation.tenant_id == principal.tenant_id,
+        SecurityAlertObservation.id == alert_id,
+    ).with_for_update())
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    if not (alert.details or {}).get("soc_closure"):
+        alert.details = {**(alert.details or {}), "soc_closure": {
+            "reason": payload.reason, "actor": principal.subject,
+            "closed_at": datetime.now(UTC).isoformat(),
+        }}
+        db.add(AuditEvent(
+            tenant_id=principal.tenant_id, actor=principal.subject,
+            action="alert.closed", details={"alert_id": alert.id, "reason": payload.reason},
+        ))
+    return alert_response(alert)
 
 
 @app.post("/api/v1/risks/{risk_id}/feedback", status_code=201)

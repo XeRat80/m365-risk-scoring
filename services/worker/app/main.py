@@ -305,7 +305,10 @@ async def process_job_with_connector(
                 )
             for event in user_alerts:
                 event_id = pseudonym(tenant_key, "security-alert", event.get("id", ""))
-                if await session.get(SecurityAlertObservation, (tenant_id, event_id)):
+                existing_alert = await session.get(SecurityAlertObservation, (tenant_id, event_id))
+                if existing_alert:
+                    existing_alert.severity = str(event.get("severity") or "unknown").lower()
+                    existing_alert.status = str(event.get("status") or "unknown")
                     continue
                 devices = event.get("deviceEvidence") or []
                 first_device = devices[0] if isinstance(devices, list) and devices else {}
@@ -621,7 +624,8 @@ async def process_job_with_connector(
                 auth_explanations.append(auth.explanation)
             email_component = top_k_mean(canonical_email_values)
             endpoint_component = endpoint_threat(
-                [alert.severity for alert in stored_alerts] if alert_source_available else None
+                [alert.severity for alert in stored_alerts if alert.status.lower() != "resolved"]
+                if alert_source_available else None
             )
             components = {
                 "email_threat": email_component,

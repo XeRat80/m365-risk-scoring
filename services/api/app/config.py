@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
     metrics_key: str = Field(default="local-metrics-key-change-me", min_length=24)
     model_dir: str = "artifacts/models/current"
-    sync_interval_seconds: int = 5
+    sync_interval_seconds: int = Field(default=5, ge=1)
     graph_client_id: str | None = None
     graph_client_secret: str | None = None
     graph_redirect_uri: str = "http://localhost:8000/api/v1/tenants/onboarding/callback"

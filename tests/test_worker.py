@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import httpx
@@ -10,6 +11,7 @@ import pytest
 from services.api.app.models import (
     EmailFeature,
     RiskScore,
+    SecurityAlertObservation,
     User,
     UserDailyFeature,
 )
@@ -66,8 +68,11 @@ class FakeSession:
         self.added: list[object] = []
         self.latest_score: RiskScore | None = None
         self.statements: list[object] = []
+        self.alerts: dict[tuple[uuid.UUID, str], SecurityAlertObservation] = {}
 
     async def get(self, model: type[object], key: object) -> object | None:
+        if model is SecurityAlertObservation:
+            return self.alerts.get(key)  # type: ignore[arg-type]
         if model is User:
             return self.users.get(key)  # type: ignore[arg-type]
         if model is EmailFeature:
@@ -90,6 +95,8 @@ class FakeSession:
             return list(self.daily.values())
         if "FROM risk_scores" in sql:
             return list(self.scores)
+        if "FROM security_alert_observations" in sql:
+            return list(self.alerts.values())
         return []
 
     async def flush(self) -> None:
@@ -101,6 +108,8 @@ class FakeSession:
 
     def add(self, value: object) -> None:
         self.added.append(value)
+        if isinstance(value, SecurityAlertObservation):
+            self.alerts[(value.tenant_id, value.id)] = value
         if isinstance(value, User):
             self.users[(value.tenant_id, value.id)] = value
         if isinstance(value, EmailFeature):
@@ -158,6 +167,41 @@ async def test_worker_does_not_persist_unchanged_scores(monkeypatch: pytest.Monk
     await worker.process_job(tenant_id, uuid.uuid4(), {})
     assert not any(isinstance(value, RiskScore) for value in session.added)
     assert len(session.emails) == email_count
+
+
+@pytest.mark.asyncio
+async def test_worker_refreshes_existing_alert_between_cycles(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = FakeSession()
+    tenant_id = uuid.UUID("00000000-0000-4000-8000-000000000001")
+
+    class AlertConnector(FakeConnector):
+        alert_status = "new"
+        severity = "medium"
+
+        async def security_alerts(self, _: uuid.UUID, since: datetime) -> list[dict[str, object]]:
+            return [{"id": "alert-1", "createdDateTime": datetime.now(UTC).isoformat(),
+                     "status": self.alert_status, "severity": self.severity,
+                     "userStates": [{"userId": "user-001"}]}]
+
+    connector = AlertConnector()
+
+    async def fake_session(_: uuid.UUID) -> AsyncIterator[FakeSession]:
+        yield session
+
+    monkeypatch.setattr(worker, "connector_for", lambda *_: connector)
+    monkeypatch.setattr(worker, "tenant_session", fake_session)
+    monkeypatch.setattr(worker, "complete_job", AsyncMock())
+    await worker.process_job(tenant_id, uuid.uuid4(), {})
+    assert len(session.alerts) == 1
+    connector.severity = "high"
+    next(iter(session.alerts.values())).details = {"soc_closure": {"reason": "accepted_risk"}}
+    await worker.process_job(tenant_id, uuid.uuid4(), {})
+    assert next(iter(session.alerts.values())).severity == "high"
+    connector.alert_status = "resolved"
+    await worker.process_job(tenant_id, uuid.uuid4(), {})
+    assert len(session.alerts) == 1
+    assert next(iter(session.alerts.values())).status == "resolved"
+    assert next(iter(session.alerts.values())).details["soc_closure"] == {"reason": "accepted_risk"}
 
 
 class PartialConnector(FakeConnector):

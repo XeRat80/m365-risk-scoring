@@ -13,6 +13,26 @@ class ErrorEnvelope(BaseModel):
     request_id: str | None = None
 
 
+class AlertCloseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: Literal["resolved", "false_positive", "accepted_risk"]
+
+
+class AlertResponse(BaseModel):
+    id: str
+    user_id: str | None
+    severity: str
+    provider_status: str
+    soc_status: str
+    created_at: datetime
+    closure: dict[str, object] | None = None
+
+
+class AlertPage(BaseModel):
+    items: list[AlertResponse]
+    next_cursor: str | None = None
+
+
 class TokenRequest(BaseModel):
     tenant_id: uuid.UUID
     role: Literal["analyst", "admin"] = "analyst"

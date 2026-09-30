@@ -214,6 +214,47 @@ class MockGraphConnector(HttpGraphConnector):
 
 
 class RealGraphConnector(HttpGraphConnector):
+    async def _get(self, url: str, tenant_id: uuid.UUID) -> dict[str, Any]:
+        parsed = urlsplit(url)
+        if (parsed.scheme, parsed.netloc) != ("https", "graph.microsoft.com"):
+            raise RuntimeError("Rejected Graph continuation URL outside Microsoft Graph")
+        return await super()._get(url, tenant_id)
+
+    async def security_alerts(
+        self, tenant_id: uuid.UUID, since: datetime
+    ) -> list[dict[str, Any]]:
+        timestamp = quote(since.isoformat().replace("+00:00", "Z"), safe="-:TZ")
+        rows = await self._collection(
+            f"{self.base_url}/v1.0/security/alerts_v2"
+            f"?$filter=lastUpdateDateTime%20ge%20{timestamp}"
+            "&$select=id,createdDateTime,lastUpdateDateTime,severity,status,"
+            "serviceSource,category,evidence&$top=100",
+            tenant_id,
+        )
+        # Translate v2 evidence into the worker's metadata contract. Never retain
+        # evidence payloads (which can contain message subjects or other content).
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            users: set[str] = set()
+            devices: list[dict[str, str]] = []
+            for evidence in row.get("evidence") or []:
+                if not isinstance(evidence, dict):
+                    continue
+                account = evidence.get("userAccount")
+                if isinstance(account, dict) and account.get("azureAdUserId"):
+                    users.add(str(account["azureAdUserId"]))
+                if evidence.get("deviceDnsName"):
+                    devices.append({"deviceDnsName": str(evidence["deviceDnsName"])})
+            normalized.append({
+                **{key: row.get(key) for key in (
+                    "id", "createdDateTime", "lastUpdateDateTime", "severity",
+                    "status", "serviceSource", "category",
+                )},
+                "userStates": [{"userId": user} for user in sorted(users)],
+                "deviceEvidence": devices,
+            })
+        return normalized
+
     def __init__(
         self,
         settings: Settings,

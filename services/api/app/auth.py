@@ -50,7 +50,7 @@ def current_principal(
             elif settings.oidc_analyst_role in roles:
                 claimed_role = "analyst"
             else:
-                claimed_role = "analyst"
+                raise ValueError("An API analyst or administrator role is required")
         role = str(claimed_role)
         if role not in {"admin", "analyst"}:
             raise ValueError("unsupported role")
