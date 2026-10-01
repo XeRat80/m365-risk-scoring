@@ -66,10 +66,10 @@ class ModelRuntime:
             pipeline = None
             onnx_session = None
         else:
-            if not pipeline_path.exists():
-                raise RuntimeError("Model pipeline artifact is missing")
-            pipeline = joblib.load(pipeline_path)
             onnx_path = root / "model.onnx"
+            if not pipeline_path.exists() and not onnx_path.exists():
+                raise RuntimeError("Model pipeline or ONNX artifact is missing")
+            pipeline = joblib.load(pipeline_path) if pipeline_path.exists() else None
             onnx_session = (
                 InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
                 if onnx_path.exists()
@@ -88,7 +88,7 @@ class ModelRuntime:
     def predict(
         self, features: Mapping[str, float], fallback_message: Mapping[str, object]
     ) -> float:
-        if self.pipeline is None:
+        if self.pipeline is None and self.onnx_session is None:
             probability = email_threat_score(fallback_message)[0]
             return precision_guarded_email_probability(probability, fallback_message)
         ordered = np.asarray([[float(features[name]) for name in FEATURE_NAMES]], dtype=np.float32)

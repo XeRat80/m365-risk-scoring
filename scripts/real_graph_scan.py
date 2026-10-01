@@ -25,6 +25,7 @@ from urllib.parse import urlencode
 import httpx
 
 from packages.ml.m365risk_ml.features import graph_message_features
+from scripts.field_features import canonical_from_graph
 from services.api.app.config import Settings
 from services.api.app.connectors import RealGraphConnector
 
@@ -277,6 +278,7 @@ async def collect(args: argparse.Namespace, key: bytes, secret: str) -> dict[str
         )
         user_rows: list[dict[str, Any]] = []
         mail_rows: list[dict[str, Any]] = []
+        canonical_rows: list[dict[str, Any]] = []
         mailbox_failures = 0
         for index, user in enumerate(selected, start=1):
             user_id = str(user["id"])
@@ -295,6 +297,16 @@ async def collect(args: argparse.Namespace, key: bytes, secret: str) -> dict[str
             user_rows.append(derive_user_features(
                 user_id, key, registration_by_id.get(user_id), risk_by_id.get(user_id),
                 admin_ids, sign_ins, alerts, safe_mails, captured_at=captured_at,
+            ))
+            canonical_rows.append(canonical_from_graph(
+                user_id=user_id,
+                key=key,
+                registration=registration_by_id.get(user_id),
+                risky=risk_by_id.get(user_id),
+                admin_ids=admin_ids,
+                sign_ins=sign_ins,
+                alerts=alerts,
+                captured_at=datetime.fromisoformat(captured_at),
             ))
         coverage["mail"] = {
             "status": "available" if mailbox_failures == 0 else "partial_or_unavailable",
@@ -328,6 +340,7 @@ async def collect(args: argparse.Namespace, key: bytes, secret: str) -> dict[str
             os.chmod(output, 0o700)
             write_private_jsonl(output / "user_features.jsonl", user_rows)
             write_private_jsonl(output / "mail_features.jsonl", mail_rows)
+            write_private_jsonl(output / "canonical_features.jsonl", canonical_rows)
             write_private_json(output / "manifest.json", result)
         return result
     finally:

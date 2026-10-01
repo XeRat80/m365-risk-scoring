@@ -12,7 +12,8 @@ RUN pip install --require-hashes -r requirements.txt \
     && python -m pip uninstall --yes pip
 COPY services ./services
 COPY packages ./packages
-COPY scripts/__init__.py scripts/build_demo_model.py scripts/real_graph_scan.py ./scripts/
+COPY bundles/field-research ./bundles/field-research
+COPY scripts/__init__.py scripts/build_demo_model.py scripts/real_graph_scan.py scripts/field_features.py scripts/field_score.py ./scripts/
 COPY alembic.ini ./
 COPY db ./db
 RUN mkdir -p /app/artifacts/models/current

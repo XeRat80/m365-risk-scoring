@@ -39,7 +39,10 @@ Pilot mode requests only the selected user's directory record, MFA state, risk r
 
 ```bash
 ./scripts/real-scan.sh scan TENANT_UUID CLIENT_UUID PILOT_USER_OBJECT_UUID pilot-01
-python3 -m json.tool private/scans/pilot-01/manifest.json
+./scripts/real-scan.sh score pilot-01
+sed -n '1,100p' private/scans/pilot-01/manifest.json
+sed -n '1,100p' private/scans/pilot-01/score_report.json
+sed -n '1p' private/scans/pilot-01/scores.jsonl
 ```
 
 After approving the pilot scope, an explicit full-tenant run is:
@@ -48,6 +51,6 @@ After approving the pilot scope, an explicit full-tenant run is:
 ./scripts/real-scan.sh scan TENANT_UUID CLIENT_UUID all-users tenant-01
 ```
 
-Files remain under `private/scans/RUN_NAME/` on that machine: `manifest.json` (coverage and failures), `user_features.jsonl` (pseudonymous per-user metadata features), and `mail_features.jsonl` (pseudonymous per-message model header features). `private/collector.key` keeps pseudonyms stable across scans; back it up in the company's secret store. All are ignored by Git. Treat them as confidential, even without names or content.
+Files remain under `private/scans/RUN_NAME/` on that machine: `manifest.json` (coverage and failures), `user_features.jsonl`, `mail_features.jsonl`, `canonical_features.jsonl`, then `scores.jsonl` and `score_report.json` after `score`. `private/collector.key` keeps pseudonyms stable across scans; back it up in the company's secret store. All are ignored by Git. Treat them as confidential, even without names or content.
 
-This is **collection and feature engineering**, not a live SOC score. It does not feed the PostgreSQL worker, train or validate a model, or certify phishing detection. SPF/DKIM/DMARC are marked unavailable because an untrusted message header is not a trusted transport verdict. For continuous SOC deployment, company OIDC, private database, approved model and worker/Graph integration still require tenant-specific validation. The local `scan_cli.py` command is a different path: it asks the installed API/worker to scan and then exports features from PostgreSQL.
+The `score` command evaluates an **experimental, unapproved** email-header ONNX model and fuses it with canonical identity, MFA, privilege and provider-alert signals. The email model was trained on a public mail corpus, not on confirmed Microsoft 365 compromise cases; the user score is transparent signal fusion, not a separately trained user-compromise model. If coverage is insufficient, `score` is `null` and `level` is `insufficient_data` - never a fabricated zero. `review_candidate` is not a Microsoft or SOC alert. SPF/DKIM/DMARC are marked unavailable because an untrusted message header is not a trusted transport verdict. This field command does not yet feed the continuously running SOC API; company identity, approval and tenant-specific validation remain separate work.

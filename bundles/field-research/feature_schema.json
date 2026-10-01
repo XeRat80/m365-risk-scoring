@@ -1,0 +1,19 @@
+{
+  "version": "EmailMetadataV1",
+  "features": [
+    "header_count",
+    "received_hops",
+    "recipient_count",
+    "missing_message_id",
+    "missing_date",
+    "from_sender_mismatch",
+    "reply_to_mismatch",
+    "return_path_mismatch",
+    "has_auth_results",
+    "has_list_id",
+    "has_precedence",
+    "has_html_content_type",
+    "encoded_from",
+    "malformed_message_id"
+  ]
+}

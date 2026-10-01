@@ -8,6 +8,7 @@ usage() {
   printf '%s\n' \
     'Usage: ./scripts/real-scan.sh check TENANT_ID CLIENT_ID USER_ID|all-users' \
     '       ./scripts/real-scan.sh scan TENANT_ID CLIENT_ID USER_ID|all-users RUN_NAME' \
+    '       ./scripts/real-scan.sh score RUN_NAME' \
     '' \
     'Requires ./scripts/setup-real-scan.sh and Graph application admin consent.' \
     'The client secret is requested interactively; never put it in the command.' \
@@ -16,6 +17,22 @@ usage() {
 
 if [[ "${1:-}" == '--help' || "${1:-}" == '-h' ]]; then
   usage
+  exit 0
+fi
+if [[ "${1:-}" == 'score' ]]; then
+  if [[ "$#" -ne 2 || ! "$2" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]]; then
+    usage >&2
+    exit 2
+  fi
+  if [[ ! -f "private/scans/$2/manifest.json" ]]; then
+    printf '[ERROR] Scan not found: private/scans/%s\n' "$2" >&2
+    exit 1
+  fi
+  docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --mount "type=bind,source=$repo_dir/private,target=/app/private" \
+    m365-risk-collector:local \
+    python -m scripts.field_score --scan-dir "/app/private/scans/$2"
   exit 0
 fi
 if [[ "$#" -lt 4 || "$#" -gt 5 ]]; then

@@ -30,4 +30,5 @@ printf '[1/2] Building the read-only collector image\n'
 docker build --tag m365-risk-collector:local --file Dockerfile.python .
 printf '[2/2] Verifying the collector command\n'
 docker run --rm m365-risk-collector:local python -m scripts.real_graph_scan --help >/dev/null
+docker run --rm m365-risk-collector:local python -m scripts.field_score --help >/dev/null
 printf '\nCollector ready. Run ./scripts/real-scan.sh --help for the next command.\n'

@@ -1,0 +1,14 @@
+{
+  "version": "0.3.1-precision-field",
+  "status": "experimental",
+  "approved": false,
+  "selected_model": "random_forest_onnx",
+  "feature_version": "EmailMetadataV1",
+  "training_data": "SpamAssassin header corpus; no Microsoft 365 incident labels",
+  "artifacts": {
+    "feature_schema.json": "6ea690211e6a0eb043bf44d72f71941c9165bf4d157d6e592fa0e76dfa363bf8",
+    "hybrid_weights.json": "4e8e4958a3d33f53f51fe8e66f0fdd0f017aab141ddee6c22b4ff8823d5123bb",
+    "model.onnx": "860c6935afa9438c44a041662937bfa255dc25b79b356d48c757c83b61d6d793",
+    "thresholds.json": "4d37f706ded9bd47c66f77bab7d475c750a68911442dfbed07322c32cd217b1c"
+  }
+}

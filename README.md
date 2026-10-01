@@ -14,7 +14,7 @@ cd m365-risk-scoring
 ./scripts/doctor.sh --after-start
 ```
 
-This installer starts a simulated Microsoft environment. For direct collection from a real tenant on a company machine, use [real tenant scan](docs/REAL_TENANT_SCAN.md). Real-tenant access and scoring are not yet validated.
+This installer starts a simulated Microsoft environment. For direct read-only collection, canonical features and experimental scoring from a real tenant on a company machine, use [real tenant scan](docs/REAL_TENANT_SCAN.md). A company-tenant run and score validity have not yet been verified.
 
 ## 1. Scan and collect
 
