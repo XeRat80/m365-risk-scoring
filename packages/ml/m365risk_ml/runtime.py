@@ -101,5 +101,6 @@ class ModelRuntime:
             else:
                 probability = float(np.asarray(output)[0, 1])
         else:
+            assert self.pipeline is not None
             probability = self.pipeline.predict_proba(ordered)[0, 1]  # type: ignore[attr-defined]
         return precision_guarded_email_probability(float(probability), fallback_message)
