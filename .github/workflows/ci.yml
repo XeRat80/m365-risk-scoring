@@ -137,7 +137,7 @@ jobs:
         with: {node-version: 24}
       - run: pnpm --dir apps/web install --frozen-lockfile && pnpm --dir apps/web audit --audit-level high
       - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.python --output type=oci,dest=/tmp/python.oci .
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f apps/web/Dockerfile --output type=oci,dest=/tmp/web.oci apps/web
       - run: mkdir -p /tmp/python-oci /tmp/web-oci && tar -xf /tmp/python.oci -C /tmp/python-oci && tar -xf /tmp/web.oci -C /tmp/web-oci

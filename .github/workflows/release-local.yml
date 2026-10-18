@@ -37,7 +37,7 @@ jobs:
           test "$(python -c 'import json; print(json.load(open("artifacts/models/current/manifest.json"))["version"])')" = "$version"
       - run: python -m scripts.check_model_gate artifacts/models/current/manifest.json --require-approved
       - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - run: mkdir -p release/images
       - name: Build loadable architecture-specific OCI images
         run: |
