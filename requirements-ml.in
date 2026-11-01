@@ -1,7 +1,7 @@
 -r requirements.in
-jupyterlab>=4.4,<5
-matplotlib>=3.10,<4
-nbconvert>=7.16,<8
+jupyterlab>=4.6.4,<5
+matplotlib>=3.11.2,<4
+nbconvert>=7.17.2,<8
 nbformat>=5.10,<6
 numba>=0.62,<1
 onnx>=1.18,<2
